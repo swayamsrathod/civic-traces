@@ -125,8 +125,8 @@ civic-trace/
 ### Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/civic-trace.git
-cd civic-trace
+git clone https://github.com/swayamsrathod/civic-traces.git
+cd civic-traces
 
 python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
@@ -159,7 +159,7 @@ Add this to your `claude_desktop_config.json`:
     "civic-trace": {
       "command": "python",
       "args": ["-m", "mcp_server.server"],
-      "cwd": "/full/path/to/civic-trace"
+      "cwd": "/full/path/to/civic-traces"
     }
   }
 }
