@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CIVIC TRACE · Accountability Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --ink: #1e2126; --ink2: #2a2e35; --mist: #f3f4f6; --line: #e3e5e8;
+    --cone: #f26b1d; --green: #2e9e6b; --red: #d64545; --slate: #5b6573; --soft: #9aa3af;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", Calibri, Arial, sans-serif; background: var(--mist); color: var(--ink); }
+  header { background: var(--ink); color: #fff; padding: 14px 28px; display: flex; align-items: center; gap: 14px; }
+  .logo { width: 34px; height: 34px; border-radius: 50%; background: var(--cone); display: grid; place-items: center; }
+  .logo svg { width: 18px; height: 18px; fill: #fff; }
+  h1 { font-family: Cambria, Georgia, serif; font-size: 22px; margin: 0; letter-spacing: 1px; }
+  .tag { color: var(--soft); font-size: 14px; }
+  .live { margin-left: auto; font-size: 13px; color: var(--soft); display: flex; align-items: center; gap: 8px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); animation: blink 2s infinite; }
+  @keyframes blink { 50% { opacity: .3; } }
+
+  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; padding: 20px 28px 0; }
+  .kpi { background: #fff; border-radius: 12px; padding: 16px 18px; }
+  .kpi .n { font-family: Cambria, Georgia, serif; font-size: 32px; font-weight: bold; }
+  .kpi .l { font-size: 13px; color: var(--slate); margin-top: 2px; }
+
+  main { display: grid; grid-template-columns: 1fr 400px; gap: 16px; padding: 16px 28px 28px; }
+  .card { background: #fff; border-radius: 12px; padding: 18px; }
+  .card h2 { font-family: Cambria, Georgia, serif; font-size: 18px; margin: 0 0 4px; }
+  .card .sub { font-size: 13px; color: var(--slate); margin-bottom: 14px; }
+  #map { height: 560px; border-radius: 10px; }
+  .legend { display: flex; gap: 18px; font-size: 13px; color: var(--slate); margin-top: 10px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: var(--c); vertical-align: -1px; }
+  .side { display: flex; flex-direction: column; gap: 16px; }
+
+  .ward { display: grid; grid-template-columns: 64px 1fr 74px; align-items: center; gap: 10px; margin: 9px 0; font-size: 14px; }
+  .bar { height: 18px; border-radius: 4px; background: var(--mist); overflow: hidden; }
+  .bar div { height: 100%; border-radius: 4px; transition: width .6s; }
+  .ward .v { text-align: right; font-weight: bold; }
+  .ward .esc { grid-column: 2 / 4; font-size: 12px; color: var(--slate); margin-top: -6px; }
+
+  #feed { max-height: 300px; overflow-y: auto; }
+  .item { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .item:first-child { border-top: 0; }
+  .item.new { animation: flash 2.5s; }
+  @keyframes flash { 0% { background: #fff3eb; } 100% { background: #fff; } }
+  .pill { font-size: 11px; font-weight: bold; padding: 3px 8px; border-radius: 10px; color: #fff; height: fit-content; text-transform: uppercase; letter-spacing: .5px; }
+  .item b { display: block; }
+  .item small { color: var(--slate); }
+  .count { margin-left: auto; text-align: right; white-space: nowrap; }
+  .count b { font-size: 18px; color: var(--cone); }
+  .empty { color: var(--slate); font-size: 14px; padding: 20px 0; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><svg viewBox="0 0 384 512"><path d="M172 501C27 291 0 269 0 192 0 86 86 0 192 0s192 86 192 192c0 77-27 99-172 309a24 24 0 0 1-40 0zM192 272a80 80 0 1 0 0-160 80 80 0 0 0 0 160z"/></svg></div>
+  <h1>CIVIC TRACE</h1>
+  <span class="tag">Accountability Dashboard</span>
+  <div class="live"><div class="dot"></div><span id="updated">Connecting…</span></div>
+</header>
+
+<section class="kpis">
+  <div class="kpi"><div class="n" id="k-complaints">–</div><div class="l">Complaints filed</div></div>
+  <div class="kpi"><div class="n" id="k-reports">–</div><div class="l">Citizen reports</div></div>
+  <div class="kpi"><div class="n" id="k-merged" style="color:var(--cone)">–</div><div class="l">Duplicates merged</div></div>
+  <div class="kpi"><div class="n" id="k-escalated" style="color:var(--red)">–</div><div class="l">Escalated (ignored)</div></div>
+  <div class="kpi"><div class="n" id="k-resolved" style="color:var(--green)">–</div><div class="l">Resolved</div></div>
+</section>
+
+<main>
+  <div class="card">
+    <h2>Complaint hotspots</h2>
+    <div class="sub">Each pin is one complaint. Bigger pins were reported by more citizens.</div>
+    <div id="map"></div>
+    <div class="legend">
+      <span style="--c:var(--cone)">Filed</span>
+      <span style="--c:var(--red)">Escalated</span>
+      <span style="--c:var(--green)">Resolved</span>
+    </div>
+  </div>
+  <div class="side">
+    <div class="card">
+      <h2>Ward report card</h2>
+      <div class="sub">Average days to fix a complaint. Slowest first.</div>
+      <div id="wards"></div>
+    </div>
+    <div class="card">
+      <h2>Latest complaints</h2>
+      <div class="sub">Updates live as the agent files them.</div>
+      <div id="feed"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+  const API = location.origin.startsWith("http") ? location.origin : "http://localhost:8000";
+  const COLOR = { filed: "#f26b1d", pending_approval: "#9aa3af", draft: "#9aa3af", escalated: "#d64545", resolved: "#2e9e6b" };
+  const LABEL = { pothole: "Pothole", garbage: "Garbage", streetlight: "Streetlight", water_leak: "Water leak", drainage: "Drainage", other: "Other" };
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  const map = L.map("map", { zoomControl: true }).setView([13.035, 77.525], 13);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO", maxZoom: 19,
+  }).addTo(map);
+  const layer = L.layerGroup().addTo(map);
+  let seen = null, fitted = false;
+
+  function ago(iso) {
+    if (!iso) return "";
+    const d = (Date.now() - new Date(iso)) / 86400000;
+    if (d < 1 / 24) return "just now";
+    if (d < 1) return Math.round(d * 24) + "h ago";
+    return Math.round(d) + "d ago";
+  }
+
+  async function load() {
+    try {
+      const [cs, ws, st] = await Promise.all(["complaints", "wards", "stats"].map(p => fetch(`${API}/${p}`).then(r => r.json())));
+
+      for (const k of ["complaints", "reports", "merged", "escalated", "resolved"])
+        document.getElementById("k-" + k).textContent = st[k] ?? 0;
+
+      layer.clearLayers();
+      const pts = [];
+      for (const c of cs) {
+        if (c.lat == null) continue;
+        const r = 6 + Math.sqrt(c.report_count) * 3.2;
+        L.circleMarker([c.lat, c.lon], { radius: r, color: "#fff", weight: 1.5, fillColor: COLOR[c.status] || "#9aa3af", fillOpacity: .85 })
+          .bindPopup(`<b>${esc(LABEL[c.issue_type] || c.issue_type)}</b> · ${esc(c.ward)}<br>${esc(c.department)}<br>
+                      <b>${c.report_count}</b> citizen report(s) · ${esc(c.status)}<br><small>${esc(c.reference_no || "Not filed yet")}</small>`)
+          .addTo(layer);
+        pts.push([c.lat, c.lon]);
+      }
+      if (!fitted && pts.length) { map.fitBounds(pts, { padding: [30, 30] }); fitted = true; }
+
+      const max = Math.max(1, ...ws.map(w => w.avg_days));
+      document.getElementById("wards").innerHTML = ws.length ? ws.map(w => {
+        const col = w.avg_days > 15 ? "var(--red)" : w.avg_days > 7 ? "var(--cone)" : "var(--green)";
+        return `<div class="ward"><span>${esc(w.ward)}</span>
+          <div class="bar"><div style="width:${(w.avg_days / max) * 100}%;background:${col}"></div></div>
+          <span class="v" style="color:${col}">${w.avg_days} days</span>
+          <span class="esc">${w.complaints} complaints · ${w.escalation_rate}% escalated</span></div>`;
+      }).join("") : `<div class="empty">No filed complaints yet.</div>`;
+
+      const ids = new Set(cs.map(c => c.id));
+      document.getElementById("feed").innerHTML = cs.length ? cs.slice(0, 25).map(c => `
+        <div class="item ${seen && !seen.has(c.id) ? "new" : ""}">
+          <span class="pill" style="background:${COLOR[c.status] || "#9aa3af"}">${esc(c.status.replace("_", " "))}</span>
+          <div><b>${esc(LABEL[c.issue_type] || c.issue_type)} · ${esc(c.ward)}</b>
+            <small>${esc(c.reference_no || "Awaiting approval")} · ${ago(c.filed_at || c.created_at)}</small></div>
+          <div class="count"><b>${c.report_count}</b><small>reports</small></div>
+        </div>`).join("") : `<div class="empty">No complaints yet. Report one through the agent.</div>`;
+      seen = ids;
+
+      document.getElementById("updated").textContent = "Live · updated " + new Date().toLocaleTimeString();
+    } catch (e) {
+      document.getElementById("updated").textContent = "Can't reach the API. Is the backend running?";
+    }
+  }
+  load();
+  setInterval(load, 5000);
+</script>
+</body>
+</html>

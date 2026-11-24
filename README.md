@@ -105,7 +105,11 @@ civic-trace/
 │   ├── emailer.py       # Files complaints by email (dry-run by default)
 │   └── portal_filer.py  # Fills the complaint portal with Playwright
 ├── backend/
-│   └── main.py          # FastAPI for the dashboard and map
+│   └── main.py          # FastAPI: serves the dashboard and its data
+├── dashboard/
+│   └── index.html       # Live map, ward report card and complaint feed
+├── scripts/
+│   └── seed_demo.py     # Loads realistic demo complaints
 ├── demo_portal/
 │   └── index.html       # Demo copy of a city grievance portal
 ├── data/
@@ -145,9 +149,19 @@ python -m mcp_server.server
 # 2. The demo complaint portal (for portal filing)
 python -m http.server 8080 --directory demo_portal
 
-# 3. The dashboard API
+# 3. The dashboard (open http://localhost:8000)
 uvicorn backend.main:app --reload
 ```
+
+### Load demo data
+
+To fill the dashboard with realistic sample complaints around Bengaluru:
+
+```bash
+python -m scripts.seed_demo --reset
+```
+
+The dashboard refreshes every 5 seconds, so a complaint filed through the agent appears on the map live.
 
 ### Connect to Claude Desktop
 
@@ -184,8 +198,7 @@ _Screenshots coming soon. Add them to the `docs/` folder._
 
 - [x] Photo → classify → draft → approve → file
 - [x] Duplicate merging, follow-ups and escalation
-- [x] Ward accountability scores API
-- [ ] Dashboard map UI
+- [x] Live accountability dashboard: hotspot map, ward report card, complaint feed
 - [ ] Voice notes in regional languages
 - [ ] WhatsApp support
 - [ ] Auto-draft an RTI request when a complaint is ignored
