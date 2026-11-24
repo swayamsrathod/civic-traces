@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>City Grievance Portal (Demo)</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #f3f4f6; margin: 0; }
+  header { background: #1e2126; color: #fff; padding: 16px 32px; font-size: 20px; }
+  main { max-width: 560px; margin: 32px auto; background: #fff; padding: 28px; border-radius: 10px; }
+  label { display: block; margin-top: 14px; font-weight: bold; font-size: 14px; }
+  input, select, textarea { width: 100%; padding: 8px; margin-top: 6px; box-sizing: border-box; }
+  button { margin-top: 20px; background: #f26b1d; color: #fff; border: 0; padding: 10px 22px; border-radius: 6px; font-size: 15px; cursor: pointer; }
+  #result { display: none; margin-top: 20px; padding: 14px; background: #e8f5ef; border-radius: 6px; }
+  .note { font-size: 12px; color: #5b6573; }
+</style>
+</head>
+<body>
+<header>City Grievance Portal <span class="note" style="color:#9aa3af">(demo copy for CIVIC TRACE)</span></header>
+<main>
+  <label for="department">Department</label>
+  <select id="department">
+    <option>Roads and Infrastructure</option>
+    <option>Solid Waste Management</option>
+    <option>Electrical (Streetlights)</option>
+    <option>Water Supply and Sewerage</option>
+  </select>
+  <label for="issue">Issue type</label>
+  <input id="issue">
+  <label for="location">Location</label>
+  <input id="location">
+  <label for="description">Description</label>
+  <textarea id="description" rows="5"></textarea>
+  <button id="submit" onclick="submitForm()">Submit complaint</button>
+  <div id="result">Complaint registered. Reference number: <b id="reference"></b></div>
+</main>
+<script>
+  function submitForm() {
+    const ref = "GRV-" + Math.floor(100000 + Math.random() * 900000);
+    document.getElementById("reference").textContent = ref;
+    document.getElementById("result").style.display = "block";
+  }
+</script>
+</body>
+</html>
