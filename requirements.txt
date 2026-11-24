@@ -1,0 +1,9 @@
+mcp>=2
+anthropic
+python-dotenv
+fastapi
+uvicorn
+scikit-learn
+numpy
+pandas
+playwright
