@@ -8,7 +8,7 @@
 
 `Track 1 · Make MCP Matter` · Built by **Team Pablos** · Sapthagiri NPS University
 
-[🎥 Watch the demo video](https://youtu.be/z5lz1ieqwYc)
+[🎥 Watch the demo video](https://youtu.be/z5lz1ieqwYc) · [📊 Pitch deck](https://docs.google.com/presentation/d/1brBCPEl5N3mpTfX9m8S3-TqRnpjeRv5Y/edit?usp=sharing)
 
 </div>
 
