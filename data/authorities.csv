@@ -1,0 +1,7 @@
+issue_type,department,ward,authority_email,escalation_email
+pothole,Roads and Infrastructure,*,roads@example-city.gov.in,roads.chief@example-city.gov.in
+garbage,Solid Waste Management,*,swm@example-city.gov.in,swm.chief@example-city.gov.in
+streetlight,Electrical (Streetlights),*,electrical@example-city.gov.in,electrical.chief@example-city.gov.in
+water_leak,Water Supply and Sewerage,*,water@example-city.gov.in,water.chief@example-city.gov.in
+drainage,Water Supply and Sewerage,*,water@example-city.gov.in,water.chief@example-city.gov.in
+other,General Grievances,*,grievance@example-city.gov.in,commissioner@example-city.gov.in
