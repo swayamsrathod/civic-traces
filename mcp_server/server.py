@@ -23,13 +23,28 @@ load_dotenv(ROOT / ".env")
 
 from analytics.duplicates import find_nearby_duplicate  # noqa: E402
 from automation.emailer import send_email  # noqa: E402
-from mcp_server.db import connect, init_db, now  # noqa: E402
+from mcp_server.db import connect, init_db, log_event, now  # noqa: E402
 
 mcp = MCPServer("civic-trace")
 init_db()
 
 ISSUE_TYPES = ["pothole", "garbage", "streetlight", "water_leak", "drainage", "other"]
-ESCALATION_DAYS = int(os.getenv("ESCALATION_DAYS", "3"))
+ESCALATION_DAYS = float(os.getenv("ESCALATION_DAYS", "3"))
+# Demo mode: set ESCALATION_MINUTES (e.g. 1) to watch follow-ups happen live.
+ESCALATION_DELTA = (timedelta(minutes=float(os.environ["ESCALATION_MINUTES"])) if os.getenv("ESCALATION_MINUTES")
+                    else timedelta(days=ESCALATION_DAYS))
+
+
+def follow_up_label():
+    m = ESCALATION_DELTA.total_seconds() / 60
+    return f"{m:g} minute(s)" if m < 60 * 24 else f"{m / 1440:g} day(s)"
+
+
+def nearest_ward(lat: float, lon: float) -> str:
+    """Pick the ward whose centre is closest (data/wards.csv)."""
+    with open(ROOT / "data" / "wards.csv", newline="") as f:
+        wards = list(csv.DictReader(f))
+    return min(wards, key=lambda w: (float(w["lat"]) - lat) ** 2 + (float(w["lon"]) - lon) ** 2)["ward"]
 
 
 def _load_authorities():
@@ -124,7 +139,7 @@ def check_duplicates(issue_type: str, lat: float, lon: float, radius_m: int = 50
 
 @mcp.tool()
 def draft_complaint(issue_type: str, severity: str, description: str, lat: float, lon: float,
-                    location_name: str = "", ward: str = "*") -> dict:
+                    location_name: str = "", ward: str = "*", photo_path: str = "") -> dict:
     """Save the report and draft a formal complaint. If the same issue was already reported
     nearby, the report joins that complaint and the count goes up instead."""
     dup = check_duplicates(issue_type, lat, lon)
@@ -133,6 +148,7 @@ def draft_complaint(issue_type: str, severity: str, description: str, lat: float
         if dup["duplicate"]:
             cid = dup["complaint_id"]
             conn.execute("UPDATE complaints SET report_count = report_count + 1 WHERE id=?", (cid,))
+            log_event(conn, cid, "merged", "Another citizen reported the same issue nearby")
         else:
             cur = conn.execute(
                 "INSERT INTO complaints (issue_type, department, authority_email, escalation_email, ward, status, created_at) "
@@ -140,9 +156,11 @@ def draft_complaint(issue_type: str, severity: str, description: str, lat: float
                 (issue_type, auth["department"], auth["authority_email"], auth["escalation_email"], ward, now()),
             )
             cid = cur.lastrowid
+            log_event(conn, cid, "reported", f"{issue_type.replace('_', ' ').title()} reported ({severity} severity)")
         conn.execute(
-            "INSERT INTO reports (issue_type, severity, description, lat, lon, ward, complaint_id, created_at) VALUES (?,?,?,?,?,?,?,?)",
-            (issue_type, severity, description, lat, lon, ward, cid, now()),
+            "INSERT INTO reports (issue_type, severity, description, lat, lon, ward, complaint_id, photo_path, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (issue_type, severity, description, lat, lon, ward, cid, photo_path or None, now()),
         )
         count = conn.execute("SELECT report_count FROM complaints WHERE id=?", (cid,)).fetchone()[0]
         place = location_name or f"{lat:.5f}, {lon:.5f}"
@@ -165,6 +183,8 @@ def ask_user_approval(complaint_id: int) -> dict:
     an explicit 'yes' from the user before calling file_complaint."""
     with connect() as conn:
         c = conn.execute("SELECT * FROM complaints WHERE id=?", (complaint_id,)).fetchone()
+        if c is None:
+            return {"error": f"No complaint with id {complaint_id}"}
         conn.execute("UPDATE complaints SET status='pending_approval' WHERE id=? AND status='draft'", (complaint_id,))
     return {
         "complaint_id": complaint_id,
@@ -182,6 +202,8 @@ def file_complaint(complaint_id: int, user_confirmed: bool, method: str = "email
         return {"filed": False, "reason": "User has not approved this complaint."}
     with connect() as conn:
         c = conn.execute("SELECT * FROM complaints WHERE id=?", (complaint_id,)).fetchone()
+    if c is None:
+        return {"filed": False, "reason": f"No complaint with id {complaint_id}"}
     if c["status"] in ("filed", "escalated", "resolved"):
         return {"filed": False, "reason": f"Already {c['status']}", "reference_no": c["reference_no"]}
 
@@ -196,7 +218,8 @@ def file_complaint(complaint_id: int, user_confirmed: bool, method: str = "email
 
     with connect() as conn:
         conn.execute("UPDATE complaints SET status='filed', reference_no=?, filed_at=? WHERE id=?", (ref, now(), complaint_id))
-    return {"filed": True, "reference_no": ref, "method": method, "follow_up_in_days": ESCALATION_DAYS}
+        log_event(conn, complaint_id, "filed", f"Filed with {c['department']} by {'grievance portal' if method == 'portal' else 'email'}. Reference {ref}")
+    return {"filed": True, "reference_no": ref, "method": method, "follow_up_in": follow_up_label()}
 
 
 @mcp.tool()
@@ -210,7 +233,7 @@ def track_status(complaint_id: int = 0) -> list:
         last = r["last_followup_at"] or r["filed_at"]
         r["overdue"] = bool(
             r["status"] in ("filed", "escalated") and last
-            and datetime.now() - datetime.fromisoformat(last) > timedelta(days=ESCALATION_DAYS)
+            and datetime.now() - datetime.fromisoformat(last) > ESCALATION_DELTA
         )
     return rows
 
@@ -221,6 +244,8 @@ def escalate(complaint_id: int) -> dict:
     the next goes to the senior officer and marks the complaint as escalated."""
     with connect() as conn:
         c = conn.execute("SELECT * FROM complaints WHERE id=?", (complaint_id,)).fetchone()
+    if c is None:
+        return {"sent": False, "reason": f"No complaint with id {complaint_id}"}
     if c["status"] not in ("filed", "escalated"):
         return {"sent": False, "reason": f"Complaint is {c['status']}"}
     first = c["last_followup_at"] is None
@@ -236,7 +261,33 @@ def escalate(complaint_id: int) -> dict:
             "UPDATE complaints SET last_followup_at=?, status=? WHERE id=?",
             (now(), "filed" if first else "escalated", complaint_id),
         )
+        log_event(conn, complaint_id, "reminder" if first else "escalated",
+                  "Reminder sent to the department" if first else "Escalated to the senior officer")
     return {"sent": True, "to": to, "level": "reminder" if first else "escalated to senior officer"}
+
+
+def resolve_complaint(complaint_id: int, note: str = "") -> dict:
+    """Mark a complaint as fixed (used by the department) and notify every citizen who reported it."""
+    with connect() as conn:
+        c = conn.execute("SELECT * FROM complaints WHERE id=?", (complaint_id,)).fetchone()
+        if c is None:
+            return {"resolved": False, "reason": f"No complaint with id {complaint_id}"}
+        if c["status"] == "resolved":
+            return {"resolved": False, "reason": "Already resolved"}
+        conn.execute("UPDATE complaints SET status='resolved', resolved_at=? WHERE id=?", (now(), complaint_id))
+        log_event(conn, complaint_id, "resolved", note or "Marked fixed by the department")
+        log_event(conn, complaint_id, "notified", f"All {c['report_count']} reporter(s) notified")
+    return {"resolved": True, "reporters_notified": c["report_count"]}
+
+
+def run_due_followups() -> list:
+    """Send every follow-up that is due. Called on a timer by the backend, so CIVIC TRACE keeps
+    chasing complaints without anyone asking. Stops once a complaint has been escalated."""
+    done = []
+    for r in track_status():
+        if r["overdue"] and r["status"] == "filed":
+            done.append({"complaint_id": r["id"], **escalate(r["id"])})
+    return done
 
 
 if __name__ == "__main__":

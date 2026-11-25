@@ -25,7 +25,15 @@ def init_db():
                 lon REAL NOT NULL,
                 ward TEXT,
                 complaint_id INTEGER,
+                photo_path TEXT,
                 created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                complaint_id INTEGER NOT NULL,
+                at TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                detail TEXT
             );
             CREATE TABLE IF NOT EXISTS complaints (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,6 +53,16 @@ def init_db():
             );
             """
         )
+        # Upgrade databases created before photos were supported
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(reports)")]
+        if "photo_path" not in cols:
+            conn.execute("ALTER TABLE reports ADD COLUMN photo_path TEXT")
+
+
+def log_event(conn, complaint_id, kind, detail=""):
+    """Append one line to a complaint's audit trail."""
+    conn.execute("INSERT INTO events (complaint_id, at, kind, detail) VALUES (?,?,?,?)",
+                 (complaint_id, now(), kind, detail))
 
 
 def now():
