@@ -4,9 +4,14 @@
 
 ### Snap it. We'll chase it.
 
-**An AI agent that files civic complaints for you, and keeps following up until they're actually fixed.**
+**An MCP agent that files civic complaints for citizens, and keeps following up until they're fixed.**
 
-`Track 1 · Make MCP Matter` · Built by **Team Pablos** · Sapthagiri NPS University
+[![tests](https://github.com/swayamsrathod/civic-traces/actions/workflows/tests.yml/badge.svg)](https://github.com/swayamsrathod/civic-traces/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![MCP](https://img.shields.io/badge/MCP-8%20tools-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+`wHACKiest 2026` · `Track 1 · Make MCP Matter` · **Team Pablos** · Sapthagiri NPS University
 
 [🎥 Watch the demo video](https://youtu.be/z5lz1ieqwYc) · [📊 Pitch deck](https://docs.google.com/presentation/d/1brBCPEl5N3mpTfX9m8S3-TqRnpjeRv5Y/edit?usp=sharing)
 
@@ -16,11 +21,11 @@
 
 ## 🚧 The problem
 
-You see a pothole, an overflowing garbage bin or a broken streetlight. You report it. Then nothing happens.
+You see a pothole, an overflowing garbage bin or a dead streetlight. You report it. Then nothing happens.
 
-- **Who handles this?** Roads, water, power and garbage are separate departments, so people guess and wrong guesses get dropped.
-- **Portals are a maze.** Logins, long forms and a different website for every city.
-- **Nobody follows up.** Once filed, complaints go silent. There are no reminders, no escalation and no record of who ignored them.
+- **Routing.** Roads, water, power and garbage are different departments. Citizens have to guess.
+- **Filing.** Every portal has its own login and long form.
+- **Follow-up.** Once filed, complaints go silent. Reminders and escalation are left to the citizen, so most give up.
 
 Filing a complaint takes five minutes. Getting it fixed takes persistence nobody has time for. **CIVIC TRACE is that persistence, automated.**
 
@@ -28,53 +33,107 @@ Filing a complaint takes five minutes. Getting it fixed takes persistence nobody
 
 ## ✨ What it does
 
+![Workflow](docs/workflow.jpg)
+
 | Step | What happens |
 |---|---|
-| 📸 **Snap** | Send a photo, voice note or text. Location is captured automatically. |
-| 🧠 **Understand** | A vision model identifies the issue, rates its severity and finds the responsible department. |
-| ✉️ **File** | The agent drafts a formal complaint and submits it **only after you approve it**. |
-| 🔁 **Trace** | It tracks the reference number, sends reminders and escalates if the complaint is ignored. |
+| 📸 **Report** | The citizen sends a photo or a message describing the problem, with its location. |
+| 🧠 **Understand** | Claude identifies the issue and its severity, and finds the responsible department. |
+| ✉️ **File** | The agent drafts a formal complaint and files it **only after the citizen approves**. |
+| 🔁 **Trace** | It tracks the reference number, sends a reminder, then escalates to a senior officer if ignored. |
 
 ### What makes it different
 
-- **🔗 Duplicate merging.** When 30 people report the same pothole, their reports are clustered (DBSCAN on location and issue type, plus photo similarity) into **one strong complaint** that shows the full count.
-- **📊 Accountability board.** A live map of hotspots and a report card for each ward or department (average fix time, ignored complaints, escalations).
-- **🛑 Human in control.** Nothing is sent in your name without explicit approval through the `ask_user_approval` tool.
+- **🔗 Duplicate merging.** Reports of the same issue within 50 m join one complaint (haversine distance, with DBSCAN clustering for analytics). Departments get one strong case showing the full count instead of 30 duplicates.
+- **📊 Accountability dashboard.** A live hotspot map and a report card for each ward: average days to fix and escalation rate.
+- **🛑 Approval enforced in code.** `file_complaint` refuses to run unless `user_confirmed` is true. Nothing goes out in the citizen's name without an explicit yes.
+- **🔌 Works without an API key.** If no Anthropic key is set, classification falls back to keyword matching, so anyone can run the full flow.
 
 ---
 
 ## 🏗️ Architecture
 
-```
- Citizen (Web / Telegram)
-          │
-          ▼
-   AI Agent (LLM) ──── plans and calls tools ────┐
-                                                 ▼
-                         ┌──────── CIVIC TRACE MCP Server ────────┐
-                         │ classify_issue     find_authority      │
-                         │ check_duplicates   draft_complaint     │
-                         │ ask_user_approval  file_complaint      │
-                         │ track_status       escalate            │
-                         └───────────────┬────────────────────────┘
-                                         ▼
-        Department email · Complaint portal (Playwright) · Maps · SQLite
+![Architecture](docs/architecture.jpg)
+
+```mermaid
+flowchart LR
+    U[Citizen] -->|photo or text| A[Claude in an MCP client]
+    A --> S[CIVIC TRACE MCP server]
+    S --> C[classify_issue]
+    S --> F[find_authority]
+    S --> D[check_duplicates]
+    S --> R[draft_complaint]
+    S --> G{ask_user_approval}
+    G -->|yes| P[file_complaint]
+    P --> E[Department email]
+    P --> W[Grievance portal via Playwright]
+    S --> T[track_status / escalate]
+    S --> DB[(SQLite)]
+    DB --> DASH[Live dashboard]
 ```
 
 ### MCP tools
 
 | Tool | Purpose |
 |---|---|
-| `classify_issue` | Reads the photo or text and returns the issue type, severity and a short description |
-| `find_authority` | Maps the issue type and location to the responsible department and contact |
-| `check_duplicates` | Finds existing reports of the same problem nearby and merges them |
-| `draft_complaint` | Writes a formal complaint with photos, location and the report count |
-| `ask_user_approval` | Shows the draft to the citizen and waits for approval |
-| `file_complaint` | Submits by official email or fills in the complaint portal with Playwright |
-| `track_status` | Stores the reference number and checks progress |
-| `escalate` | Sends reminders and escalates to a senior officer after a deadline |
+| `classify_issue` | Reads the photo or text and returns issue type, severity and a short description |
+| `find_authority` | Maps the issue type and ward to the responsible department and contacts |
+| `check_duplicates` | Finds an existing complaint for the same issue within 50 m |
+| `draft_complaint` | Saves the report, merges duplicates and writes a formal complaint |
+| `ask_user_approval` | Shows the draft to the citizen and asks for an explicit yes |
+| `file_complaint` | Files by official email or by filling the grievance portal with Playwright |
+| `track_status` | Shows status and flags complaints overdue for follow-up |
+| `escalate` | First a reminder to the department, then escalation to the senior officer |
 
-> **Note:** most civic portals have no public API, so complaints are filed by official email and by browser automation.
+> Most civic portals have no public API, so complaints are filed by official email and by browser automation.
+
+---
+
+## 🖼️ Screens
+
+| Approval step | Follow-up and escalation |
+|---|---|
+| ![Approval](docs/approval-step.jpg) | ![Follow-up](docs/follow-up.jpg) |
+
+---
+
+## 🚀 Quick start
+
+**Windows:** double-click `run.bat`
+**Mac / Linux:** `./run.sh`
+
+This installs everything, loads demo complaints around Bengaluru and opens the dashboard at **http://localhost:8000**.
+
+### Manual setup
+
+```bash
+git clone https://github.com/swayamsrathod/civic-traces.git
+cd civic-traces
+python -m pip install -r requirements.txt
+python -m scripts.seed_demo --reset          # optional demo data
+python -m uvicorn backend.main:app --reload  # dashboard at http://localhost:8000
+```
+
+Optional: copy `.env.example` to `.env` and add an `ANTHROPIC_API_KEY` for photo classification. For portal filing, also run `playwright install chromium` and `python -m http.server 8080 --directory demo_portal`.
+
+### Connect the agent to Claude Desktop
+
+Copy the block from [`claude_desktop_config.example.json`](claude_desktop_config.example.json) into your `claude_desktop_config.json`, set `cwd` to this folder, and restart Claude Desktop. Then try:
+
+> *"Here's a photo of a pothole near Gate 2 of our college. Please report it."*
+
+> Emails are **not sent** while `DRY_RUN=true` (the default); they're printed to the console. The contacts in `data/authorities.csv` are samples. Replace them with verified department contacts before real use.
+
+---
+
+## 🧪 Tests
+
+```bash
+python -m pip install pytest
+pytest -q
+```
+
+19 tests cover classification, routing, duplicate merging, the approval gate, escalation and ward scores. They run automatically on every push through GitHub Actions.
 
 ---
 
@@ -82,146 +141,58 @@ Filing a complaint takes five minutes. Getting it fixed takes persistence nobody
 
 | Layer | Tools |
 |---|---|
-| Agent | Claude / Gemini LLM, MCP Python SDK |
-| Backend | FastAPI, SQLite (PostgreSQL + PostGIS for scale) |
-| Vision | Multimodal LLM (no custom training) |
-| Data science | scikit-learn (DBSCAN with haversine distance), pandas |
+| Agent | Claude, MCP Python SDK |
+| Backend | FastAPI, SQLite |
+| Vision | Claude's image input (no custom training) |
+| Data science | scikit-learn (DBSCAN, haversine), pandas |
 | Automation | Playwright, SMTP |
-| Client | Any MCP client (e.g. Claude Desktop); dashboard with Leaflet maps |
+| Dashboard | Leaflet, vanilla JavaScript |
 
 ---
 
 ## 📁 Project structure
 
 ```
-civic-trace/
-├── mcp_server/
-│   ├── server.py        # MCP server with all 8 tools
-│   └── db.py            # SQLite storage
-├── analytics/
-│   ├── duplicates.py    # DBSCAN duplicate clustering
-│   └── ward_scores.py   # Ward accountability scores
-├── automation/
-│   ├── emailer.py       # Files complaints by email (dry-run by default)
-│   └── portal_filer.py  # Fills the complaint portal with Playwright
-├── backend/
-│   └── main.py          # FastAPI: serves the dashboard and its data
-├── dashboard/
-│   └── index.html       # Live map, ward report card and complaint feed
-├── scripts/
-│   └── seed_demo.py     # Loads realistic demo complaints
-├── demo_portal/
-│   └── index.html       # Demo copy of a city grievance portal
-├── data/
-│   └── authorities.csv  # Department and contact directory (sample)
-├── requirements.txt
-└── .env.example
+civic-traces/
+├── mcp_server/          # MCP server (8 tools) and SQLite storage
+├── analytics/           # Duplicate clustering and ward scores
+├── automation/          # Email filing and Playwright portal filing
+├── backend/             # FastAPI: serves the dashboard and its data
+├── dashboard/           # Live map, ward report card, complaint feed
+├── demo_portal/         # Demo copy of a city grievance portal
+├── scripts/             # Demo data loader
+├── data/                # Department directory (sample)
+├── tests/               # pytest suite
+├── docs/                # README images
+├── run.bat / run.sh     # One-click start
+└── claude_desktop_config.example.json
 ```
-
----
-
-## 🚀 Getting started
-
-### Prerequisites
-- Python 3.10+
-- An Anthropic API key (for photo classification)
-
-### Setup
-
-```bash
-git clone https://github.com/swayamsrathod/civic-traces.git
-cd civic-traces
-
-python -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-playwright install chromium
-
-cp .env.example .env              # then add your API key
-```
-
-### Run
-
-```bash
-# 1. The MCP server (connect it to Claude Desktop or any MCP client)
-python -m mcp_server.server
-
-# 2. The demo complaint portal (for portal filing)
-python -m http.server 8080 --directory demo_portal
-
-# 3. The dashboard (open http://localhost:8000)
-uvicorn backend.main:app --reload
-```
-
-### Load demo data
-
-To fill the dashboard with realistic sample complaints around Bengaluru:
-
-```bash
-python -m scripts.seed_demo --reset
-```
-
-The dashboard refreshes every 5 seconds, so a complaint filed through the agent appears on the map live.
-
-### Connect to Claude Desktop
-
-Add this to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "civic-trace": {
-      "command": "python",
-      "args": ["-m", "mcp_server.server"],
-      "cwd": "/full/path/to/civic-traces"
-    }
-  }
-}
-```
-
-Then try: *"Here's a photo of a pothole near Gate 2 of our college. Please report it."*
-
-> Emails are **not sent** while `DRY_RUN=true` (the default). They're printed to the console instead. The addresses in `data/authorities.csv` are samples. Replace them with your city's real department contacts before going live.
-
----
-
-## 📸 Screenshots
-
-_Screenshots coming soon. Add them to the `docs/` folder._
-
----|---|---|
-| ![Report](docs/report.png) | ![Draft](docs/draft.png) | ![Map](docs/map.png) |
 
 ---
 
 ## 🗺️ Roadmap
 
-- [x] Photo → classify → draft → approve → file
-- [x] Duplicate merging, follow-ups and escalation
-- [x] Live accountability dashboard: hotspot map, ward report card, complaint feed
+- [x] Photo or text → classify → draft → approve → file
+- [x] Duplicate merging, reminders and escalation
+- [x] Live accountability dashboard
+- [x] Automated tests and CI
 - [ ] Voice notes in regional languages
 - [ ] WhatsApp support
 - [ ] Auto-draft an RTI request when a complaint is ignored
-- [ ] Open data export for city planners
+- [ ] Verified department directories for more cities
 
 ---
 
-## 👥 Team Pablos
+## 👥 Team Pablos · Sapthagiri NPS University
 
-Sapthagiri NPS University
+| Name |
+|---|
+| Swayam S Rathod (Lead) |
+| Trishul G Urs |
+| Neeraj M |
+| Yashas Gowda |
 
-- Swayam S Rathod
-- Trishul G Urs
-- Neeraj M
-- Yashas Gowda
-
----|---|
-| [Member 1] | MCP server and agent |
-| [Member 2] | Data science and analytics |
-| [Member 3] | Automation and backend |
-| [Member 4] | Frontend and design |
-
----
+Licensed under the [MIT License](LICENSE).
 
 <div align="center">
 
