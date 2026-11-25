@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Department view · CIVIC TRACE</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--slate); padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr.esc td { background: #fff8f8; }
+  .num { font-weight: bold; font-size: 17px; }
+  .old { color: var(--red); font-weight: bold; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .filters button { border: 1px solid var(--line); background: #fff; border-radius: 20px; padding: 6px 14px; cursor: pointer; font: inherit; font-size: 14px; }
+  .filters button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  @media (max-width: 700px) { .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><svg viewBox="0 0 384 512"><path d="M172 501C27 291 0 269 0 192 0 86 86 0 192 0s192 86 192 192c0 77-27 99-172 309a24 24 0 0 1-40 0zM192 272a80 80 0 1 0 0-160 80 80 0 0 0 0 160z"/></svg></div>
+  <a class="brand" href="/report">CIVIC TRACE</a>
+  <nav><a href="/report">Report</a><a href="/track">Track</a><a href="/">Dashboard</a><a class="on" href="/department">Department</a></nav>
+</header>
+<div class="wrap">
+  <h1>Department view</h1>
+  <p class="lead">Open complaints, escalated first. Marking one fixed closes it and notifies every citizen who reported it.</p>
+  <div class="notice warn" style="margin-bottom:18px">Demo view without login. A real deployment would give each department its own secure access.</div>
+  <div class="card">
+    <div class="filters" id="filters"></div>
+    <div id="list"></div>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const LABEL = { pothole: "Pothole", garbage: "Garbage", streetlight: "Streetlight", water_leak: "Water leak", drainage: "Drainage", other: "Other" };
+const days = a => Math.max(0, Math.floor((Date.now() - new Date(a)) / 86400000));
+let dept = "All", rows = [];
+
+async function load() {
+  rows = (await (await fetch("/complaints")).json()).filter(c => c.status === "filed" || c.status === "escalated");
+  rows.sort((a, b) => (b.status === "escalated") - (a.status === "escalated") || new Date(a.filed_at) - new Date(b.filed_at));
+  const depts = ["All", ...new Set(rows.map(r => r.department))];
+  if (!depts.includes(dept)) dept = "All";
+  $("filters").innerHTML = depts.map(d => `<button class="${d === dept ? "on" : ""}" data-d="${esc(d)}">${esc(d)}</button>`).join("");
+  document.querySelectorAll("#filters button").forEach(b => b.onclick = () => { dept = b.dataset.d; load(); });
+  const show = rows.filter(r => dept === "All" || r.department === dept);
+  $("list").innerHTML = show.length ? `<table><thead><tr><th>Reference</th><th>Issue</th><th class="hide-sm">Department</th><th>Citizens</th><th>Days open</th><th>Status</th><th></th></tr></thead><tbody>
+    ${show.map(c => `<tr class="${c.status === "escalated" ? "esc" : ""}">
+      <td><a class="mono" href="/track?id=${c.id}">${esc(c.reference_no)}</a></td>
+      <td>${esc(LABEL[c.issue_type] || c.issue_type)} · ${esc(c.ward)}</td>
+      <td class="hide-sm">${esc(c.department)}</td>
+      <td class="num">${c.report_count}</td>
+      <td class="${days(c.filed_at) > 7 ? "old" : ""}">${days(c.filed_at)}</td>
+      <td><span class="pill s-${esc(c.status)}">${esc(c.status)}</span></td>
+      <td><button class="btn green" style="padding:8px 14px;font-size:14px" data-id="${c.id}">Mark fixed</button></td></tr>`).join("")}
+    </tbody></table>` : `<div class="empty">No open complaints. Everything reported has been fixed.</div>`;
+  document.querySelectorAll("button[data-id]").forEach(b => b.onclick = async () => {
+    b.disabled = true; b.textContent = "Closing…";
+    await fetch(`/complaints/${b.dataset.id}/resolve`, { method: "POST" });
+    load();
+  });
+}
+load();
+setInterval(load, 15000);
+</script>
+</body>
+</html>

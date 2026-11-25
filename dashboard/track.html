@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Track a complaint · CIVIC TRACE</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  .ref { font-family: Cambria, Georgia, serif; font-size: 28px; font-weight: bold; }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+  .fact { background: #f6f7f9; border-radius: 10px; padding: 12px; }
+  .fact b { display: block; font-size: 17px; margin-top: 2px; }
+  .fact span { font-size: 12px; color: var(--slate); text-transform: uppercase; letter-spacing: .5px; }
+  @media (max-width: 700px) { .facts { grid-template-columns: 1fr 1fr; } }
+  .tl { position: relative; padding-left: 28px; }
+  .tl::before { content: ""; position: absolute; left: 8px; top: 6px; bottom: 6px; width: 2px; background: var(--line); }
+  .ev { position: relative; padding: 0 0 18px; }
+  .ev::before { content: ""; position: absolute; left: -25px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--c, var(--soft)); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+  .ev b { display: block; font-size: 15px; } .ev small { color: var(--slate); }
+  .photos { display: flex; gap: 10px; flex-wrap: wrap; } .photos img { height: 120px; border-radius: 8px; }
+  .search { display: flex; gap: 10px; } .search input { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><svg viewBox="0 0 384 512"><path d="M172 501C27 291 0 269 0 192 0 86 86 0 192 0s192 86 192 192c0 77-27 99-172 309a24 24 0 0 1-40 0zM192 272a80 80 0 1 0 0-160 80 80 0 0 0 0 160z"/></svg></div>
+  <a class="brand" href="/report">CIVIC TRACE</a>
+  <nav><a href="/report">Report</a><a class="on" href="/track">Track</a><a href="/">Dashboard</a><a href="/department">Department</a></nav>
+</header>
+<div class="wrap" style="max-width:820px">
+  <h1>Track a complaint</h1>
+  <p class="lead">Every step CIVIC TRACE takes is recorded here.</p>
+  <div class="card">
+    <div class="search"><input type="text" id="q" placeholder="Reference number, e.g. CT-0004 or GRV-604281"><button class="btn primary" id="go">Track</button></div>
+    <div id="err" class="notice err" style="display:none;margin-top:10px"></div>
+  </div>
+  <div id="out"></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const LABEL = { pothole: "Pothole", garbage: "Garbage", streetlight: "Streetlight", water_leak: "Water leak", drainage: "Drainage", other: "Other issue" };
+const KIND = { reported: ["Reported", "var(--soft)"], merged: ["Another citizen joined", "var(--cone)"], filed: ["Filed", "var(--cone)"],
+  reminder: ["Reminder sent", "#f5b82e"], escalated: ["Escalated", "var(--red)"], resolved: ["Fixed", "var(--green)"], notified: ["Reporters notified", "var(--green)"] };
+const fmt = iso => iso ? new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+const days = (a, b) => Math.max(0, Math.round((new Date(b || Date.now()) - new Date(a)) / 86400000));
+let currentId = null;
+
+async function load(id) {
+  $("err").style.display = "none";
+  const r = await fetch(`/api/complaints/${id}`);
+  if (!r.ok) { $("err").textContent = "Complaint not found."; $("err").style.display = "block"; return; }
+  const c = await r.json(); currentId = id;
+  history.replaceState(null, "", `/track?id=${id}`);
+  const next = c.status === "resolved" ? "Closed" : c.status === "escalated" ? "With senior officer" : c.status === "filed" ? `Every ${c.follow_up_every}` : "Awaiting approval";
+  $("out").innerHTML = `
+    <div class="card">
+      <div class="head"><div><div class="ref mono">${esc(c.reference_no || "Not filed yet")}</div>
+        <div class="lead" style="margin:4px 0 0">${esc(LABEL[c.issue_type] || c.issue_type)} · ${esc(c.ward)} · ${esc(c.department)}</div></div>
+        <span class="pill s-${esc(c.status)}">${esc(c.status.replace("_", " "))}</span></div>
+      <div class="facts">
+        <div class="fact"><span>Citizens</span><b>${c.report_count}</b></div>
+        <div class="fact"><span>Filed</span><b>${c.filed_at ? fmt(c.filed_at) : "–"}</b></div>
+        <div class="fact"><span>Days open</span><b>${c.filed_at ? days(c.filed_at, c.resolved_at) : "–"}</b></div>
+        <div class="fact"><span>Follow-up</span><b>${esc(next)}</b></div>
+      </div>
+    </div>
+    ${c.photos.length ? `<div class="card"><h2>Photos</h2><div class="photos">${c.photos.map(p => `<img src="${esc(p)}" alt="Reported photo">`).join("")}</div></div>` : ""}
+    <div class="card"><h2>Audit trail</h2><div class="tl">
+      ${c.events.length ? c.events.map(e => { const [t, col] = KIND[e.kind] || [e.kind, "var(--soft)"];
+        return `<div class="ev" style="--c:${col}"><b>${esc(t)}</b><small>${fmt(e.at)} · ${esc(e.detail)}</small></div>`; }).join("") : `<div class="empty">No events yet.</div>`}
+    </div></div>`;
+}
+
+$("go").onclick = async () => {
+  const q = $("q").value.trim(); if (!q) return;
+  if (/^\d+$/.test(q)) return load(q);
+  const r = await fetch(`/api/lookup?ref=${encodeURIComponent(q)}`);
+  if (!r.ok) { $("err").textContent = "No complaint with that reference number."; $("err").style.display = "block"; return; }
+  load((await r.json()).id);
+};
+$("q").onkeydown = e => { if (e.key === "Enter") $("go").click(); };
+const id = new URLSearchParams(location.search).get("id");
+if (id) load(id);
+setInterval(() => currentId && load(currentId), 10000);
+</script>
+</body>
+</html>
