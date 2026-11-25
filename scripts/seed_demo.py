@@ -9,6 +9,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from mcp_server.db import DB_PATH, connect, init_db  # noqa: E402
 
+
+def event(conn, cid, at, kind, detail):
+    conn.execute("INSERT INTO events (complaint_id, at, kind, detail) VALUES (?,?,?,?)", (cid, at.isoformat(timespec="seconds"), kind, detail))
+
 random.seed(7)
 
 # ward: (centre lat, lon, how slow the department is in days)
@@ -65,6 +69,17 @@ def main():
                 )
                 cid = cur.lastrowid
                 conn.execute("UPDATE complaints SET reference_no=? WHERE id=?", (f"CT-{cid:04d}", cid))
+                event(conn, cid, filed - timedelta(minutes=5), "reported", f"{issue.replace('_', ' ').title()} reported")
+                if count > 1:
+                    event(conn, cid, filed - timedelta(minutes=2), "merged", f"{count - 1} more citizen report(s) merged")
+                event(conn, cid, filed, "filed", f"Filed with {ISSUES[issue]} by email. Reference CT-{cid:04d}")
+                if status == "escalated" or (resolved and fix_time > 3):
+                    event(conn, cid, filed + timedelta(days=3), "reminder", "Reminder sent to the department")
+                if status == "escalated":
+                    event(conn, cid, filed + timedelta(days=6), "escalated", "Escalated to the senior officer")
+                if resolved:
+                    event(conn, cid, resolved, "resolved", "Marked fixed by the department")
+                    event(conn, cid, resolved, "notified", f"All {count} reporter(s) notified")
                 for _ in range(count):
                     conn.execute(
                         "INSERT INTO reports (issue_type, severity, description, lat, lon, ward, complaint_id, created_at) "
