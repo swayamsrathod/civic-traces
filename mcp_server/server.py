@@ -41,7 +41,38 @@ def _load_authorities():
 def classify_issue(image_path: str = "", text: str = "") -> dict:
     """Identify the civic issue from a photo and/or text.
     Returns issue_type (one of pothole, garbage, streetlight, water_leak, drainage, other),
-    severity (low, medium, high) and a one-line description."""
+    severity (low, medium, high) and a one-line description.
+    Without an ANTHROPIC_API_KEY it falls back to keyword matching on the text."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        return {**classify_text(text), "method": "keyword fallback (no API key set)"}
+    try:
+        out = _classify_with_claude(image_path, text)
+        if out.get("issue_type") not in ISSUE_TYPES:
+            out["issue_type"] = "other"
+        return {**out, "method": "claude"}
+    except Exception as e:  # network error, bad key, unparseable reply
+        return {**classify_text(text), "method": f"keyword fallback ({type(e).__name__})"}
+
+
+KEYWORDS = {
+    "pothole": ["pothole", "crater", "road broken", "damaged road", "hole in the road", "gundi"],
+    "garbage": ["garbage", "trash", "waste", "dump", "litter", "rubbish", "kasa"],
+    "streetlight": ["streetlight", "street light", "light not working", "dark road", "lamp"],
+    "water_leak": ["leak", "pipe", "pipeline", "water flowing", "burst"],
+    "drainage": ["drain", "sewage", "sewer", "overflow", "manhole", "flooded"],
+}
+HIGH_WORDS = ["dangerous", "accident", "deep", "huge", "big", "injur", "urgent", "flood", "kids", "school"]
+
+
+def classify_text(text: str) -> dict:
+    """Simple keyword classifier used when Claude is not available."""
+    t = (text or "").lower()
+    issue = next((k for k, words in KEYWORDS.items() if any(w in t for w in words)), "other")
+    severity = "high" if any(w in t for w in HIGH_WORDS) else "medium"
+    return {"issue_type": issue, "severity": severity, "description": (text or "Civic issue reported").strip()[:160]}
+
+
+def _classify_with_claude(image_path: str, text: str) -> dict:
     import anthropic
 
     content = []
