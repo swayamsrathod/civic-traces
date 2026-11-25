@@ -8,10 +8,13 @@
 
 [![tests](https://github.com/swayamsrathod/civic-traces/actions/workflows/tests.yml/badge.svg)](https://github.com/swayamsrathod/civic-traces/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![MCP](https://img.shields.io/badge/MCP-8%20tools-orange)
+![MCP](https://img.shields.io/badge/MCP-8%20tools%20·%204%20resources%20·%201%20prompt-orange)
+![Languages](https://img.shields.io/badge/languages-English%20·%20ಕನ್ನಡ%20·%20हिंदी-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 `wHACKiest 2026` · `Track 1 · Make MCP Matter` · **Team Pablos** · Sapthagiri NPS University
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/swayamsrathod/civic-traces)
 
 [🎥 Watch the demo video](https://youtu.be/z5lz1ieqwYc) · [📊 Pitch deck](https://docs.google.com/presentation/d/1brBCPEl5N3mpTfX9m8S3-TqRnpjeRv5Y/edit?usp=sharing)
 
@@ -49,6 +52,8 @@ Filing a complaint takes five minutes. Getting it fixed takes persistence nobody
 - **🛑 Approval enforced in code.** `file_complaint` refuses to run unless `user_confirmed` is true. Nothing goes out in the citizen's name without an explicit yes.
 - **⏰ Follows up on its own.** A background job checks every 30 seconds and sends due reminders and escalations, with no one having to ask.
 - **🧾 Full audit trail.** Every step (reported, merged, filed, reminder, escalated, fixed, reporters notified) is logged and shown to the citizen.
+- **⚖️ RTI when ignored.** For an escalated complaint, CIVIC TRACE drafts a Right to Information Act 2005 (Section 6(1)) application from the complaint's own record, asking what action was taken and by whom. The department must reply within 30 days.
+- **🗣️ Kannada, Hindi and English.** Citizens can use the report and tracking pages in their language, and the classifier understands Kannada and Hindi words, including romanised ones like *kachra* and *gaddha*.
 - **🔌 Works without an API key.** If no Anthropic key is set, classification falls back to keyword matching, so anyone can run the full flow.
 
 ---
@@ -74,7 +79,22 @@ flowchart LR
     DB --> DASH[Live dashboard]
 ```
 
-### MCP tools
+### MCP: tools, resources and a prompt
+
+Run it locally over stdio for Claude Desktop, or connect any MCP client to the **remote endpoint at `/mcp`** of the running app (streamable HTTP). A deployed CIVIC TRACE is a public MCP server.
+
+**Resources** (read-only data clients can browse)
+
+| URI | What it returns |
+|---|---|
+| `civictrace://wards/scores` | Ward report card: average days to fix, escalation rate |
+| `civictrace://complaints/open` | All unresolved complaints |
+| `civictrace://complaints/{id}` | One complaint with its full audit trail |
+| `civictrace://complaints/{id}/rti` | A ready-to-file RTI application |
+
+**Prompt:** `report_civic_issue` walks any MCP client through classify → draft → approve → file, and never files without a yes.
+
+**Tools**
 
 | Tool | Purpose |
 |---|---|
@@ -98,7 +118,7 @@ No Claude Desktop needed. The web app runs the same tools as the MCP agent.
 | Page | What it does |
 |---|---|
 | **/report** | Citizen adds a photo, a description and a pin on the map. The agent's tool calls appear step by step, then the draft waits for **Approve and file**. |
-| **/track** | Look up a complaint by reference number and see its full audit trail and photos. |
+| **/track** | Look up a complaint by reference number, see its audit trail and photos, and draft an RTI application if it's been ignored. |
 | **/** | Live accountability dashboard: hotspot map, ward report card, complaint feed. |
 | **/department** | Open complaints, escalated first. **Mark fixed** closes one and notifies every reporter. |
 
@@ -118,6 +138,10 @@ No Claude Desktop needed. The web app runs the same tools as the MCP agent.
 This installs everything, loads demo complaints around Bengaluru and opens **http://localhost:8000/report**.
 
 **Live demo tip:** set `ESCALATION_MINUTES=1` (in `.env` or your terminal) and a filed complaint gets its reminder after one minute and is escalated a minute later, so judges can watch the follow-up happen.
+
+### Live link in 2 minutes
+
+Click **Deploy to Render** above, sign in with GitHub and press **Apply**. Render builds the included `Dockerfile`, loads demo complaints automatically and gives you a public URL. Fast demo follow-ups (every 2 minutes) are switched on. The free plan sleeps when idle, so the first visit can take about a minute to wake it.
 
 ### Manual setup
 
@@ -148,7 +172,7 @@ python -m pip install pytest
 pytest -q
 ```
 
-30 tests cover classification, routing, duplicate merging, the approval gate, escalation, the web report flow, photo upload checks, automatic follow-ups, the department view and ward scores. They run automatically on every push through GitHub Actions.
+40 tests cover classification (English, Kannada, Hindi), routing, duplicate merging, the approval gate, escalation, the web report flow, photo upload checks, automatic follow-ups, the department view, RTI drafting, the remote MCP endpoint, auto-seeding and ward scores. They run automatically on every push through GitHub Actions.
 
 ---
 
@@ -180,6 +204,7 @@ civic-traces/
 ├── tests/               # pytest suite
 ├── docs/                # README images
 ├── run.bat / run.sh     # One-click start
+├── Dockerfile, render.yaml  # One-click deployment
 └── claude_desktop_config.example.json
 ```
 
@@ -194,9 +219,12 @@ civic-traces/
 - [x] Automatic background follow-ups and audit trail
 - [x] Department view to close complaints and notify reporters
 - [x] Automated tests and CI
+- [x] Kannada and Hindi
+- [x] RTI application drafting for ignored complaints
+- [x] Remote MCP endpoint, resources and prompt
+- [x] One-click deployment
 - [ ] Voice notes in regional languages
 - [ ] WhatsApp support
-- [ ] Auto-draft an RTI request when a complaint is ignored
 - [ ] Verified department directories for more cities
 
 ---
