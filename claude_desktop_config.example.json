@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "civic-trace": {
+      "command": "python",
+      "args": ["-m", "mcp_server.server"],
+      "cwd": "C:\\full\\path\\to\\civic-traces",
+      "env": {
+        "ANTHROPIC_API_KEY": "your_key_here",
+        "DRY_RUN": "true"
+      }
+    }
+  }
+}
