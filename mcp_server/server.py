@@ -69,14 +69,21 @@ def classify_issue(image_path: str = "", text: str = "") -> dict:
         return {**classify_text(text), "method": f"keyword fallback ({type(e).__name__})"}
 
 
+# English, Kannada and Hindi (script and romanised), so citizens can report in their own language.
 KEYWORDS = {
-    "pothole": ["pothole", "crater", "road broken", "damaged road", "hole in the road", "gundi"],
-    "garbage": ["garbage", "trash", "waste", "dump", "litter", "rubbish", "kasa"],
-    "streetlight": ["streetlight", "street light", "light not working", "dark road", "lamp"],
-    "water_leak": ["leak", "pipe", "pipeline", "water flowing", "burst"],
-    "drainage": ["drain", "sewage", "sewer", "overflow", "manhole", "flooded"],
+    "pothole": ["pothole", "crater", "road broken", "damaged road", "hole in the road", "gundi",
+                "ಗುಂಡಿ", "ರಸ್ತೆ ಹಾಳ", "गड्ढा", "गड्ढे", "सड़क टूटी", "gaddha", "gadda"],
+    "garbage": ["garbage", "trash", "waste", "dump", "litter", "rubbish", "kasa",
+                "ಕಸ", "ತ್ಯಾಜ್ಯ", "कचरा", "कूड़ा", "कूडा", "kachra", "kuda"],
+    "streetlight": ["streetlight", "street light", "light not working", "dark road", "lamp",
+                    "ಬೀದಿ ದೀಪ", "ದೀಪ", "स्ट्रीट लाइट", "बत्ती", "batti"],
+    "water_leak": ["leak", "pipe", "pipeline", "water flowing", "burst",
+                   "ಸೋರಿಕೆ", "ಪೈಪ್", "लीक", "पाइप", "पानी बह"],
+    "drainage": ["drain", "sewage", "sewer", "overflow", "manhole", "flooded",
+                 "ಚರಂಡಿ", "ಒಳಚರಂಡಿ", "नाली", "सीवर", "nali", "gutter"],
 }
-HIGH_WORDS = ["dangerous", "accident", "deep", "huge", "big", "injur", "urgent", "flood", "kids", "school"]
+HIGH_WORDS = ["dangerous", "accident", "deep", "huge", "big", "injur", "urgent", "flood", "kids", "school",
+              "ಅಪಾಯ", "ಅಪಘಾತ", "ಆಳವಾದ", "ದೊಡ್ಡ", "खतरनाक", "दुर्घटना", "गहरा", "बड़ा", "khatarnak"]
 
 
 def classify_text(text: str) -> dict:
@@ -280,15 +287,138 @@ def resolve_complaint(complaint_id: int, note: str = "") -> dict:
     return {"resolved": True, "reporters_notified": c["report_count"]}
 
 
-def run_due_followups() -> list:
+def run_due_followups(filed_after: str = "") -> list:
     """Send every follow-up that is due. Called on a timer by the backend, so CIVIC TRACE keeps
-    chasing complaints without anyone asking. Stops once a complaint has been escalated."""
+    chasing complaints without anyone asking. Stops once a complaint has been escalated.
+    filed_after (ISO time) limits it to newer complaints, used in fast demo mode."""
     done = []
     for r in track_status():
+        if filed_after and (r["filed_at"] or "") < filed_after:
+            continue
         if r["overdue"] and r["status"] == "filed":
             done.append({"complaint_id": r["id"], **escalate(r["id"])})
     return done
 
 
+# ---------- MCP resources: read-only data any MCP client can browse ----------
+
+@mcp.resource("civictrace://wards/scores", name="ward_scores", mime_type="application/json",
+              description="Accountability report card: average days to fix and escalation rate per ward")
+def ward_scores_resource() -> str:
+    from analytics.ward_scores import ward_scores
+    with connect() as conn:
+        rows = [dict(r) for r in conn.execute("SELECT ward, status, filed_at, resolved_at FROM complaints")]
+    return json.dumps(ward_scores(rows), indent=2)
+
+
+@mcp.resource("civictrace://complaints/open", name="open_complaints", mime_type="application/json",
+              description="Complaints that are filed or escalated and not yet fixed")
+def open_complaints_resource() -> str:
+    with connect() as conn:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT id, reference_no, issue_type, ward, department, status, report_count, filed_at "
+            "FROM complaints WHERE status IN ('filed', 'escalated') ORDER BY filed_at")]
+    return json.dumps(rows, indent=2)
+
+
+@mcp.resource("civictrace://complaints/{complaint_id}", name="complaint_trail", mime_type="application/json",
+              description="One complaint with its full audit trail")
+def complaint_resource(complaint_id: str) -> str:
+    with connect() as conn:
+        c = conn.execute("SELECT id, reference_no, issue_type, ward, department, status, report_count, filed_at, "
+                         "resolved_at FROM complaints WHERE id=?", (int(complaint_id),)).fetchone()
+        if c is None:
+            return json.dumps({"error": f"No complaint with id {complaint_id}"})
+        events = [dict(r) for r in conn.execute(
+            "SELECT at, kind, detail FROM events WHERE complaint_id=? ORDER BY id", (int(complaint_id),))]
+    return json.dumps({**dict(c), "events": events}, indent=2)
+
+
+def draft_rti_request(complaint_id: int, applicant_name: str = "[Your full name]",
+                      applicant_address: str = "[Your address, phone and email]") -> dict:
+    """Write a Right to Information (RTI Act 2005, Section 6(1)) application asking what action
+    was taken on an ignored complaint, using the complaint's own audit trail as the facts."""
+    with connect() as conn:
+        c = conn.execute("SELECT * FROM complaints WHERE id=?", (complaint_id,)).fetchone()
+        if c is None:
+            return {"error": f"No complaint with id {complaint_id}"}
+        events = {r["kind"]: r["at"] for r in conn.execute(
+            "SELECT kind, MIN(at) AS at FROM events WHERE complaint_id=? GROUP BY kind", (complaint_id,))}
+    if c["status"] not in ("filed", "escalated") or not c["reference_no"]:
+        return {"error": "An RTI request is only useful for a filed complaint that is still unresolved."}
+    day = lambda iso: datetime.fromisoformat(iso).strftime("%d %B %Y") if iso else "[date]"
+    issue = c["issue_type"].replace("_", " ")
+    history = [f"- Complaint {c['reference_no']} about a {issue} in {c['ward']} was filed on {day(c['filed_at'])}."]
+    if c["report_count"] > 1:
+        history.append(f"- The same issue was reported by {c['report_count']} citizens.")
+    if "reminder" in events:
+        history.append(f"- A reminder was sent on {day(events['reminder'])}.")
+    if "escalated" in events:
+        history.append(f"- The complaint was escalated to the senior officer on {day(events['escalated'])}.")
+    history.append("- As of the date of this application, the issue has not been resolved.")
+    text = f"""To,
+The Public Information Officer,
+{c['department']},
+[Office address of the department]
+
+Subject: Request for information under Section 6(1) of the Right to Information Act, 2005,
+regarding civic complaint {c['reference_no']}
+
+Sir / Madam,
+
+Background:
+{chr(10).join(history)}
+
+Please provide the following information:
+1. The daily progress report or file notings on complaint {c['reference_no']}, with certified copies.
+2. The name and designation of the officer responsible for acting on this complaint.
+3. The dates on which the complaint, the reminder and the escalation were received, and the action taken on each.
+4. The time limit for resolving such complaints under the department's citizen charter or service rules, and the reasons for the delay in this case.
+5. The expected date by which the {issue} will be fixed.
+
+I am enclosing the application fee of Rs. 10 (or have paid it online). I am a citizen of India.
+Please provide the information within 30 days, as required under Section 7(1) of the Act.
+
+Yours faithfully,
+{applicant_name}
+{applicant_address}
+Date: {datetime.now().strftime("%d %B %Y")}
+"""
+    return {"complaint_id": complaint_id, "reference_no": c["reference_no"], "rti_text": text,
+            "how_to_file": "In Karnataka, file online at https://rtionline.karnataka.gov.in or by post to the department's "
+                           "Public Information Officer. Fee Rs. 10. A reply is due within 30 days; if there is none, "
+                           "a first appeal can be filed under Section 19(1)."}
+
+
+@mcp.resource("civictrace://complaints/{complaint_id}/rti", name="rti_request", mime_type="text/plain",
+              description="A ready-to-file RTI application for an unresolved complaint")
+def rti_resource(complaint_id: str) -> str:
+    out = draft_rti_request(int(complaint_id))
+    return out.get("rti_text") or out["error"]
+
+
+# ---------- MCP prompt: a guided workflow clients can offer as a slash command ----------
+
+@mcp.prompt(name="report_civic_issue", description="Report a civic problem and have CIVIC TRACE file and chase it")
+def report_civic_issue(description: str, location: str = "") -> str:
+    return (
+        "You are CIVIC TRACE, an agent that files civic complaints for a citizen and follows them up.\n"
+        f"The citizen reports: {description}\n"
+        f"Location: {location or 'ask the citizen for the location or landmark'}\n\n"
+        "Steps:\n"
+        "1. Call classify_issue with the description (and the photo path if one was shared).\n"
+        "2. Call draft_complaint with the issue, severity, description, coordinates and landmark. "
+        "It routes to the right department and merges duplicate reports automatically.\n"
+        "3. Call ask_user_approval and show the citizen the full draft and who it will be sent to.\n"
+        "4. Only if the citizen clearly says yes, call file_complaint with user_confirmed=true.\n"
+        "5. Tell the citizen the reference number and when CIVIC TRACE will follow up.\n"
+        "Never file without an explicit yes."
+    )
+
+
 if __name__ == "__main__":
-    mcp.run()
+    # stdio for Claude Desktop (default), or:  python -m mcp_server.server --http  (port 8001)
+    if "--http" in sys.argv:
+        mcp.run("streamable-http", host="0.0.0.0", port=int(os.getenv("MCP_PORT", "8001")))
+    else:
+        mcp.run()
