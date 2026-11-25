@@ -41,8 +41,8 @@ def report(client, desc="Deep dangerous pothole near Gate 2", photo=False, **whe
 
 
 def test_pages_are_served(client):
-    for path, text in (("/", "Accountability"), ("/report", "Report a civic issue"),
-                       ("/track", "Track a complaint"), ("/department", "Department view")):
+    for path, text in (("/", "Accountability"), ("/report", 'data-i18n="r_title"'),
+                       ("/track", 'data-i18n="t_title"'), ("/department", "Department view")):
         r = client.get(path)
         assert r.status_code == 200 and text in r.text
 
@@ -121,3 +121,80 @@ def test_contact_emails_are_not_exposed(client):
     cid = report(client).json()["complaint_id"]
     detail = client.get(f"/api/complaints/{cid}").json()
     assert "authority_email" not in detail and "escalation_email" not in detail
+
+
+# ---------- remote MCP over HTTP ----------
+
+MCP_H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json",
+         "mcp-protocol-version": "2025-06-18"}
+
+
+def rpc(client, method, params=None, id_=1):
+    r = client.post("/mcp", headers=MCP_H, json={"jsonrpc": "2.0", "id": id_, "method": method, "params": params or {}})
+    assert r.status_code == 200, r.text
+    return r.json()["result"]
+
+
+def test_mcp_endpoint_lists_tools_resources_and_prompt(client):
+    rpc(client, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "judge", "version": "1"}})
+    tools = [t["name"] for t in rpc(client, "tools/list")["tools"]]
+    assert len(tools) == 8 and "file_complaint" in tools and "ask_user_approval" in tools
+    uris = [r["uri"] for r in rpc(client, "resources/list")["resources"]]
+    assert "civictrace://wards/scores" in uris
+    assert [p["name"] for p in rpc(client, "prompts/list")["prompts"]] == ["report_civic_issue"]
+
+
+def test_mcp_tool_call_over_http(client):
+    out = rpc(client, "tools/call", {"name": "classify_issue", "arguments": {"text": "Garbage dumped near the bus stop"}})
+    assert out["isError"] is False
+    assert '"issue_type": "garbage"' in out["content"][0]["text"]
+
+
+# ---------- languages ----------
+
+@pytest.mark.parametrize("text,issue", [
+    ("ಮುಖ್ಯ ರಸ್ತೆಯಲ್ಲಿ ಆಳವಾದ ಗುಂಡಿ", "pothole"),
+    ("ಬಸ್ ನಿಲ್ದಾಣದ ಬಳಿ ಕಸ ಸುರಿಯಲಾಗಿದೆ", "garbage"),
+    ("गेट के पास गहरा गड्ढा है", "pothole"),
+    ("नाली बंद है, पानी भर गया", "drainage"),
+    ("yahan bahut kachra hai", "garbage"),
+])
+def test_kannada_and_hindi_reports(client, text, issue):
+    assert client.tools.classify_text(text)["issue_type"] == issue
+
+
+# ---------- RTI ----------
+
+def test_rti_only_for_filed_unresolved_complaints(client):
+    cid = report(client).json()["complaint_id"]
+    assert client.get(f"/api/complaints/{cid}/rti").status_code == 400   # not filed yet
+
+
+def test_rti_draft_uses_the_audit_trail(client):
+    cid = report(client).json()["complaint_id"]
+    ref = client.post(f"/api/complaints/{cid}/file", json={"confirmed": True}).json()["reference_no"]
+    time.sleep(0.1); client.tools.run_due_followups()
+    time.sleep(0.1); client.tools.run_due_followups()
+    d = client.get(f"/api/complaints/{cid}/rti", params={"name": "Swayam S Rathod"}).json()
+    text = d["rti_text"]
+    assert "Section 6(1) of the Right to Information Act, 2005" in text
+    assert ref in text and "Roads and Infrastructure" in text
+    assert "reminder was sent" in text and "escalated to the senior officer" in text
+    assert "Swayam S Rathod" in text and "Section 7(1)" in text
+
+
+def test_auto_seed_fills_an_empty_database(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "seed.db"))
+    monkeypatch.setenv("UPLOADS_DIR", str(tmp_path / "u"))
+    monkeypatch.setenv("AUTO_SEED", "true")
+    monkeypatch.setenv("FOLLOWUP_CHECK_SECONDS", "0")
+    import mcp_server.db as db
+    importlib.reload(db)
+    import mcp_server.server as srv
+    importlib.reload(srv)
+    import scripts.seed_demo as seed
+    importlib.reload(seed)
+    import backend.main as main
+    importlib.reload(main)
+    with TestClient(main.app) as c:
+        assert c.get("/stats").json()["complaints"] > 20
