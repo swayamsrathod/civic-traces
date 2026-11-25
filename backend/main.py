@@ -25,6 +25,7 @@ from mcp_server.db import connect, init_db  # noqa: E402
 UPLOADS = Path(os.getenv("UPLOADS_DIR", ROOT / "uploads"))
 UPLOADS.mkdir(parents=True, exist_ok=True)
 CHECK_EVERY = int(os.getenv("FOLLOWUP_CHECK_SECONDS", "30"))
+STARTED = tools.now()  # in fast demo mode, only chase complaints filed after start-up
 PAGES = ROOT / "dashboard"
 
 
@@ -32,7 +33,7 @@ async def followup_loop():
     """Keep chasing complaints on a timer, with no one having to ask."""
     while True:
         try:
-            done = await asyncio.to_thread(tools.run_due_followups)
+            done = await asyncio.to_thread(tools.run_due_followups, STARTED if os.getenv("ESCALATION_MINUTES") else "")
             for d in done:
                 print(f"[follow-up] complaint {d['complaint_id']}: {d.get('level', d.get('reason'))}")
         except Exception as e:  # never let the loop die
@@ -40,16 +41,28 @@ async def followup_loop():
         await asyncio.sleep(CHECK_EVERY)
 
 
+# The same MCP server, reachable over HTTP at /mcp, so remote MCP clients can use the deployed app.
+MCP_HTTP = tools.mcp.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)
+
+
 @asynccontextmanager
 async def lifespan(app):
     init_db()
+    if os.getenv("AUTO_SEED", "").lower() == "true":
+        with connect() as conn:
+            empty = conn.execute("SELECT COUNT(*) FROM complaints").fetchone()[0] == 0
+        if empty:
+            from scripts.seed_demo import main as seed
+            seed()
     task = asyncio.create_task(followup_loop()) if CHECK_EVERY > 0 else None
-    yield
+    async with tools.mcp.session_manager.run():
+        yield
     if task:
         task.cancel()
 
 
 app = FastAPI(title="CIVIC TRACE", lifespan=lifespan)
+app.router.routes.extend(MCP_HTTP.routes)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/uploads", StaticFiles(directory=UPLOADS), name="uploads")
 app.mount("/static", StaticFiles(directory=ROOT / "dashboard"), name="static")
@@ -152,6 +165,14 @@ def lookup(ref: str):
     if r is None:
         raise HTTPException(404, "No complaint with that reference")
     return {"id": r[0]}
+
+
+@app.get("/api/complaints/{cid}/rti")
+def rti(cid: int, name: str = "", address: str = ""):
+    out = tools.draft_rti_request(cid, name.strip() or "[Your full name]", address.strip() or "[Your address, phone and email]")
+    if "error" in out:
+        raise HTTPException(400, out["error"])
+    return out
 
 
 # ---------- department ----------
