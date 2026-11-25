@@ -42,3 +42,7 @@ textarea { min-height: 90px; resize: vertical; }
 .notice.warn { background: var(--cone-soft); color: #9a4a12; }
 .notice.err { background: var(--red-soft); color: #9c2f2f; }
 .empty { color: var(--slate); font-size: 14px; padding: 12px 0; }
+
+.lang { display: flex; gap: 2px; margin-left: 8px; background: #2a2e35; border-radius: 9px; padding: 3px; }
+.lang button { border: 0; background: none; color: #c9ced6; font: inherit; font-size: 13px; padding: 5px 9px; border-radius: 7px; cursor: pointer; }
+.lang button.on { background: #fff; color: var(--ink); font-weight: 600; }

@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="/static/app.css">
+<script src="/static/i18n.js"></script>
 <style>
   #map { height: 280px; border-radius: 10px; margin-top: 4px; }
   .drop { border: 2px dashed #cfd3d9; border-radius: 12px; padding: 18px; text-align: center; cursor: pointer; color: var(--slate); background: #fafbfc; }
@@ -30,77 +31,78 @@
 <header>
   <div class="logo"><svg viewBox="0 0 384 512"><path d="M172 501C27 291 0 269 0 192 0 86 86 0 192 0s192 86 192 192c0 77-27 99-172 309a24 24 0 0 1-40 0zM192 272a80 80 0 1 0 0-160 80 80 0 0 0 0 160z"/></svg></div>
   <a class="brand" href="/report">CIVIC TRACE</a>
-  <nav><a class="on" href="/report">Report</a><a href="/track">Track</a><a href="/">Dashboard</a><a href="/department">Department</a></nav>
+  <nav><a class="on" href="/report" data-i18n="nav_report"></a><a href="/track" data-i18n="nav_track"></a><a href="/" data-i18n="nav_dash"></a><a href="/department" data-i18n="nav_dept"></a></nav><div class="lang"><button data-lang="en">EN</button><button data-lang="kn">ಕನ್ನಡ</button><button data-lang="hi">हिंदी</button></div>
 </header>
 
 <div class="wrap">
-  <h1>Report a civic issue</h1>
-  <p class="lead">Snap it. We'll chase it. The agent finds the right department, files only after you approve, and follows up until it's fixed.</p>
+  <h1 data-i18n="r_title"></h1>
+  <p class="lead" data-i18n="r_lead"></p>
 
   <div class="grid2">
     <div>
       <div class="card" id="form-card">
-        <h2>1. What's the problem?</h2>
+        <h2 data-i18n="r_s1"></h2>
         <div class="drop" id="drop" tabindex="0" role="button" aria-label="Add a photo">
-          <div id="drop-text">📷 Tap to add a photo (optional)</div>
+          <div id="drop-text" data-i18n="r_photo"></div>
           <img id="preview" class="hidden" alt="Selected photo">
         </div>
         <input type="file" id="photo" accept="image/jpeg,image/png,image/webp" capture="environment" class="hidden">
-        <label for="desc">Describe it</label>
-        <textarea id="desc" placeholder="e.g. Deep pothole near Gate 2 on Main Road, dangerous for bikes"></textarea>
+        <label for="desc" data-i18n="r_desc"></label>
+        <textarea id="desc" data-i18n-ph="r_desc_ph"></textarea>
 
-        <h2 style="margin-top:22px">2. Where is it?</h2>
-        <div class="row"><button class="btn ghost" id="locate" type="button">📍 Use my location</button>
-          <span class="hint" id="loc-hint">Or tap the map to move the pin.</span></div>
+        <h2 style="margin-top:22px" data-i18n="r_s2"></h2>
+        <div class="row"><button class="btn ghost" id="locate" type="button" data-i18n="r_locate"></button>
+          <span class="hint" id="loc-hint" data-i18n="r_maphint"></span></div>
         <div id="map"></div>
-        <label for="place">Landmark (optional)</label>
-        <input type="text" id="place" placeholder="e.g. Gate 2, Main Road">
+        <label for="place" data-i18n="r_landmark"></label>
+        <input type="text" id="place" data-i18n-ph="r_landmark_ph">
 
-        <div style="margin-top:20px"><button class="btn accent" id="send">Send to the CIVIC TRACE agent</button></div>
+        <div style="margin-top:20px"><button class="btn accent" id="send" data-i18n="r_send"></button></div>
         <div id="form-err" class="notice err hidden" style="margin-top:12px"></div>
       </div>
     </div>
 
     <div>
       <div class="card hidden" id="agent-card">
-        <h2>The agent is working</h2>
+        <h2 data-i18n="r_working"></h2>
         <div class="steps" id="steps"></div>
       </div>
 
       <div class="card hidden" id="draft-card">
-        <h2>3. Review and approve</h2>
+        <h2 data-i18n="r_s3"></h2>
         <div id="merge-note"></div>
         <div class="hint">To: <b id="to"></b></div>
         <pre class="draft" id="draft"></pre>
-        <div class="hint">How should it be filed?</div>
+        <div class="hint" data-i18n="r_english" style="margin-bottom:10px"></div>
+        <div class="hint" data-i18n="r_how"></div>
         <div class="method">
-          <label><input type="radio" name="method" value="email" checked> Official email</label>
-          <label><input type="radio" name="method" value="portal"> Grievance portal</label>
+          <label><input type="radio" name="method" value="email" checked> <span data-i18n="r_email"></span></label>
+          <label><input type="radio" name="method" value="portal"> <span data-i18n="r_portal"></span></label>
         </div>
         <div class="row">
-          <button class="btn primary" id="approve">✓ Approve and file</button>
-          <button class="btn ghost" id="cancel">Not now</button>
+          <button class="btn primary" id="approve" data-i18n="r_approve"></button>
+          <button class="btn ghost" id="cancel" data-i18n="r_notnow"></button>
         </div>
-        <p class="hint">Nothing is sent in your name until you approve.</p>
+        <p class="hint" data-i18n="r_nothing"></p>
         <div id="file-err" class="notice err hidden"></div>
       </div>
 
       <div class="card hidden" id="done-card">
         <div class="done">
-          <div class="notice ok" style="display:inline-block">Complaint filed</div>
+          <div class="notice ok" style="display:inline-block" data-i18n="r_filed"></div>
           <div class="ref mono" id="ref"></div>
           <p class="lead" id="done-text"></p>
-          <a class="btn primary" id="track-link" href="/track">Track this complaint</a>
+          <a class="btn primary" id="track-link" href="/track" data-i18n="r_trackbtn"></a>
         </div>
       </div>
 
       <div class="card" id="how-card">
-        <h2>What happens next</h2>
+        <h2 data-i18n="r_next"></h2>
         <ol style="margin:0;padding-left:20px;line-height:1.8;color:var(--slate);font-size:15px">
-          <li>The agent identifies the issue and the right department.</li>
-          <li>If others reported it nearby, your report joins theirs.</li>
-          <li>You approve the formal complaint before anything is sent.</li>
-          <li>If there's no response, it sends a reminder, then escalates.</li>
+          <li data-i18n="r_n1"></li>
+          <li data-i18n="r_n2"></li>
+          <li data-i18n="r_n3"></li>
+          <li data-i18n="r_n4"></li>
         </ol>
       </div>
     </div>
@@ -142,11 +144,11 @@ $("photo").onchange = () => {
 $("send").onclick = async () => {
   show($("form-err"), false);
   const desc = $("desc").value.trim(), f = $("photo").files[0];
-  if (!desc && !f) { $("form-err").textContent = "Add a photo or a short description."; return show($("form-err")); }
+  if (!desc && !f) { $("form-err").textContent = t("r_need"); return show($("form-err")); }
   const ll = pin.getLatLng(), fd = new FormData();
   fd.append("description", desc); fd.append("lat", ll.lat); fd.append("lon", ll.lng); fd.append("location_name", $("place").value.trim());
   if (f) fd.append("photo", f);
-  $("send").disabled = true; $("send").textContent = "Sending…";
+  $("send").disabled = true; $("send").textContent = t("r_sending");
   show($("how-card"), false); show($("agent-card")); show($("draft-card"), false); show($("done-card"), false);
   $("steps").innerHTML = `<div class="step show"><div class="tick" style="background:var(--soft)">…</div><div class="res">Reading your report</div></div>`;
   try {
@@ -159,7 +161,7 @@ $("send").onclick = async () => {
     const els = [...document.querySelectorAll(".step")];
     for (const [i, el] of els.entries()) { await new Promise(res => setTimeout(res, i ? 550 : 150)); el.classList.add("show"); }
     await new Promise(res => setTimeout(res, 400));
-    if (d.reference_no) return showDone(d.reference_no, `This issue was already filed. Your report was added, so ${d.report_count} citizens are now on this complaint.`);
+    if (d.reference_no) return showDone(d.reference_no, t("r_done_dup").replace("{n}", d.report_count));
     $("to").textContent = `${d.department} (${d.send_to})`;
     $("draft").textContent = d.draft;
     $("merge-note").innerHTML = d.merged ? `<div class="notice warn" style="margin-bottom:10px">${d.report_count} citizens have reported this issue. Your report makes the complaint stronger.</div>` : "";
@@ -167,7 +169,7 @@ $("send").onclick = async () => {
   } catch (e) {
     $("form-err").textContent = e.message; show($("form-err")); show($("agent-card"), false);
   } finally {
-    $("send").disabled = false; $("send").textContent = "Send to the CIVIC TRACE agent";
+    $("send").disabled = false; $("send").textContent = t("r_send");
   }
 };
 
@@ -175,17 +177,17 @@ $("cancel").onclick = () => { show($("draft-card"), false); show($("agent-card")
 
 $("approve").onclick = async () => {
   show($("file-err"), false);
-  $("approve").disabled = true; $("approve").textContent = "Filing…";
+  $("approve").disabled = true; $("approve").textContent = t("r_filing");
   try {
     const method = document.querySelector("input[name=method]:checked").value;
     const r = await fetch(`/api/complaints/${complaintId}/file`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmed: true, method }) });
     const d = await r.json();
     if (!r.ok || (!d.filed && !d.reference_no)) throw new Error(d.reason || d.detail || "Filing failed.");
-    showDone(d.reference_no, d.filed ? `Filed with the department. If there's no response within ${d.follow_up_in}, CIVIC TRACE sends a reminder, then escalates.` : "This complaint was already filed.");
+    showDone(d.reference_no, d.filed ? t("r_done_ok").replace("{t}", d.follow_up_in) : t("r_done_dup").replace("{n}", "2+"));
   } catch (e) {
     $("file-err").textContent = e.message; show($("file-err"));
   } finally {
-    $("approve").disabled = false; $("approve").textContent = "✓ Approve and file";
+    $("approve").disabled = false; $("approve").textContent = t("r_approve");
   }
 };
 
