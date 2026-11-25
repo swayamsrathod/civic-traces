@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: civic-trace
+    runtime: docker
+    plan: free
+    healthCheckPath: /stats
+    envVars:
+      - key: AUTO_SEED
+        value: "true"
+      - key: DRY_RUN
+        value: "true"
+      - key: ESCALATION_MINUTES
+        value: "2"
+      - key: ANTHROPIC_API_KEY
+        sync: false
