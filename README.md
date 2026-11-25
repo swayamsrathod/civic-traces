@@ -47,6 +47,8 @@ Filing a complaint takes five minutes. Getting it fixed takes persistence nobody
 - **🔗 Duplicate merging.** Reports of the same issue within 50 m join one complaint (haversine distance, with DBSCAN clustering for analytics). Departments get one strong case showing the full count instead of 30 duplicates.
 - **📊 Accountability dashboard.** A live hotspot map and a report card for each ward: average days to fix and escalation rate.
 - **🛑 Approval enforced in code.** `file_complaint` refuses to run unless `user_confirmed` is true. Nothing goes out in the citizen's name without an explicit yes.
+- **⏰ Follows up on its own.** A background job checks every 30 seconds and sends due reminders and escalations, with no one having to ask.
+- **🧾 Full audit trail.** Every step (reported, merged, filed, reminder, escalated, fixed, reporters notified) is logged and shown to the citizen.
 - **🔌 Works without an API key.** If no Anthropic key is set, classification falls back to keyword matching, so anyone can run the full flow.
 
 ---
@@ -89,11 +91,22 @@ flowchart LR
 
 ---
 
-## 🖼️ Screens
+## 🌐 Try it in the browser
 
-| Approval step | Follow-up and escalation |
+No Claude Desktop needed. The web app runs the same tools as the MCP agent.
+
+| Page | What it does |
 |---|---|
-| ![Approval](docs/approval-step.jpg) | ![Follow-up](docs/follow-up.jpg) |
+| **/report** | Citizen adds a photo, a description and a pin on the map. The agent's tool calls appear step by step, then the draft waits for **Approve and file**. |
+| **/track** | Look up a complaint by reference number and see its full audit trail and photos. |
+| **/** | Live accountability dashboard: hotspot map, ward report card, complaint feed. |
+| **/department** | Open complaints, escalated first. **Mark fixed** closes one and notifies every reporter. |
+
+| Report: agent steps and approval | Tracking: audit trail |
+|---|---|
+| ![Report page](docs/web-report.jpg) | ![Track page](docs/web-track.jpg) |
+
+![Department view](docs/web-department.jpg)
 
 ---
 
@@ -102,7 +115,9 @@ flowchart LR
 **Windows:** double-click `run.bat`
 **Mac / Linux:** `./run.sh`
 
-This installs everything, loads demo complaints around Bengaluru and opens the dashboard at **http://localhost:8000**.
+This installs everything, loads demo complaints around Bengaluru and opens **http://localhost:8000/report**.
+
+**Live demo tip:** set `ESCALATION_MINUTES=1` (in `.env` or your terminal) and a filed complaint gets its reminder after one minute and is escalated a minute later, so judges can watch the follow-up happen.
 
 ### Manual setup
 
@@ -111,7 +126,7 @@ git clone https://github.com/swayamsrathod/civic-traces.git
 cd civic-traces
 python -m pip install -r requirements.txt
 python -m scripts.seed_demo --reset          # optional demo data
-python -m uvicorn backend.main:app --reload  # dashboard at http://localhost:8000
+python -m uvicorn backend.main:app --reload  # open http://localhost:8000/report
 ```
 
 Optional: copy `.env.example` to `.env` and add an `ANTHROPIC_API_KEY` for photo classification. For portal filing, also run `playwright install chromium` and `python -m http.server 8080 --directory demo_portal`.
@@ -133,7 +148,7 @@ python -m pip install pytest
 pytest -q
 ```
 
-19 tests cover classification, routing, duplicate merging, the approval gate, escalation and ward scores. They run automatically on every push through GitHub Actions.
+30 tests cover classification, routing, duplicate merging, the approval gate, escalation, the web report flow, photo upload checks, automatic follow-ups, the department view and ward scores. They run automatically on every push through GitHub Actions.
 
 ---
 
@@ -146,7 +161,7 @@ pytest -q
 | Vision | Claude's image input (no custom training) |
 | Data science | scikit-learn (DBSCAN, haversine), pandas |
 | Automation | Playwright, SMTP |
-| Dashboard | Leaflet, vanilla JavaScript |
+| Web app | Leaflet, vanilla JavaScript (no build step) |
 
 ---
 
@@ -157,8 +172,8 @@ civic-traces/
 ├── mcp_server/          # MCP server (8 tools) and SQLite storage
 ├── analytics/           # Duplicate clustering and ward scores
 ├── automation/          # Email filing and Playwright portal filing
-├── backend/             # FastAPI: serves the dashboard and its data
-├── dashboard/           # Live map, ward report card, complaint feed
+├── backend/             # FastAPI app, API and the automatic follow-up loop
+├── dashboard/           # Web pages: report, track, dashboard, department
 ├── demo_portal/         # Demo copy of a city grievance portal
 ├── scripts/             # Demo data loader
 ├── data/                # Department directory (sample)
@@ -175,6 +190,9 @@ civic-traces/
 - [x] Photo or text → classify → draft → approve → file
 - [x] Duplicate merging, reminders and escalation
 - [x] Live accountability dashboard
+- [x] Citizen web app: report, approve, track
+- [x] Automatic background follow-ups and audit trail
+- [x] Department view to close complaints and notify reporters
 - [x] Automated tests and CI
 - [ ] Voice notes in regional languages
 - [ ] WhatsApp support

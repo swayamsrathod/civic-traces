@@ -9,6 +9,6 @@ if [ ! -f civictrace.db ]; then
   python3 -m scripts.seed_demo
 fi
 echo
-echo "Dashboard starting at http://localhost:8000  (press Ctrl+C to stop)"
-( sleep 2; (open http://localhost:8000 || xdg-open http://localhost:8000) >/dev/null 2>&1 ) &
+echo "CIVIC TRACE starting at http://localhost:8000/report  (press Ctrl+C to stop)"
+( sleep 2; (open http://localhost:8000/report || xdg-open http://localhost:8000/report) >/dev/null 2>&1 ) &
 python3 -m uvicorn backend.main:app

@@ -14,7 +14,7 @@ if not exist civictrace.db (
   python -m scripts.seed_demo
 )
 echo.
-echo Dashboard starting at http://localhost:8000  (keep this window open)
-start "" http://localhost:8000
+echo CIVIC TRACE starting at http://localhost:8000/report  (keep this window open)
+start "" http://localhost:8000/report
 python -m uvicorn backend.main:app
 pause
